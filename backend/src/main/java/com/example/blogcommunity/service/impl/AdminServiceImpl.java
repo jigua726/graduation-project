@@ -10,6 +10,7 @@ import com.example.blogcommunity.dto.response.UserResponse;
 import com.example.blogcommunity.entity.Article;
 import com.example.blogcommunity.entity.Category;
 import com.example.blogcommunity.entity.Tag;
+import com.example.blogcommunity.entity.TagCategory;
 import com.example.blogcommunity.entity.User;
 import com.example.blogcommunity.exception.ResourceNotFoundException;
 import com.example.blogcommunity.repository.*;
@@ -38,11 +39,13 @@ public class AdminServiceImpl implements AdminService {
     private final FollowRepository followRepository;
     private final CategoryRepository categoryRepository;
     private final TagRepository tagRepository;
+    private final TagCategoryRepository tagCategoryRepository;
 
     public AdminServiceImpl(UserRepository userRepository, ArticleRepository articleRepository,
                            CommentRepository commentRepository, LikeRepository likeRepository,
                            FavoriteRepository favoriteRepository, FollowRepository followRepository,
-                           CategoryRepository categoryRepository, TagRepository tagRepository) {
+                           CategoryRepository categoryRepository, TagRepository tagRepository,
+                           TagCategoryRepository tagCategoryRepository) {
         this.userRepository = userRepository;
         this.articleRepository = articleRepository;
         this.commentRepository = commentRepository;
@@ -51,6 +54,7 @@ public class AdminServiceImpl implements AdminService {
         this.followRepository = followRepository;
         this.categoryRepository = categoryRepository;
         this.tagRepository = tagRepository;
+        this.tagCategoryRepository = tagCategoryRepository;
     }
 
     @Override
@@ -230,21 +234,24 @@ public class AdminServiceImpl implements AdminService {
     @Override
     @Transactional
     public AutoGenerateTagsResponse autoGenerateTags() {
+        // 从数据库读取所有启用的标签分类
+        List<TagCategory> tagCategoryList = tagCategoryRepository.findByEnabledTrueOrderBySortOrderAsc();
+
+        // 转换为 Map<String, List<String>> 结构，兼容原有逻辑
         Map<String, List<String>> tagCategories = new HashMap<>();
-        
-        tagCategories.put("技术", new ArrayList<>(java.util.Arrays.asList("技术", "编程", "开发", "代码", "项目", "教程")));
-        tagCategories.put("前端", new ArrayList<>(java.util.Arrays.asList("前端", "Vue", "React", "JavaScript", "HTML", "CSS", "TypeScript", "Node.js")));
-        tagCategories.put("后端", new ArrayList<>(java.util.Arrays.asList("后端", "Java", "Python", "Spring", "数据库", "MySQL", "Redis", "架构")));
-        tagCategories.put("AI", new ArrayList<>(java.util.Arrays.asList("AI", "人工智能", "机器学习", "深度学习", "大数据", "云计算")));
-        tagCategories.put("生活", new ArrayList<>(java.util.Arrays.asList("生活", "日常", "生活感悟", "生活方式", "生活随笔", "生活分享")));
-        tagCategories.put("读书", new ArrayList<>(java.util.Arrays.asList("读书", "阅读", "书单", "书评", "读书笔记", "文学", "小说", "散文")));
-        tagCategories.put("旅行", new ArrayList<>(java.util.Arrays.asList("旅行", "旅游", "游记", "风景", "自然", "人文", "古镇", "海岛")));
-        tagCategories.put("美食", new ArrayList<>(java.util.Arrays.asList("美食", "烹饪", "菜谱", "家常菜", "烘焙", "甜点", "食材")));
-        tagCategories.put("摄影", new ArrayList<>(java.util.Arrays.asList("摄影", "拍照", "相机", "镜头", "构图", "光影", "色彩")));
-        tagCategories.put("健康", new ArrayList<>(java.util.Arrays.asList("健康", "健身", "运动", "跑步", "瑜伽", "冥想", "养生")));
-        tagCategories.put("音乐", new ArrayList<>(java.util.Arrays.asList("音乐", "听歌", "唱歌", "乐器", "吉他", "钢琴", "歌单")));
-        tagCategories.put("科技", new ArrayList<>(java.util.Arrays.asList("科技", "数码", "手机", "电脑", "互联网", "创新")));
-        tagCategories.put("职场", new ArrayList<>(java.util.Arrays.asList("职场", "工作", "职业发展", "面试", "简历", "团队管理")));
+        for (TagCategory tagCategory : tagCategoryList) {
+            String[] tagArray = tagCategory.getTags().split(",");
+            List<String> tagList = new ArrayList<>();
+            for (String tag : tagArray) {
+                String trimmed = tag.trim();
+                if (!trimmed.isEmpty()) {
+                    tagList.add(trimmed);
+                }
+            }
+            if (!tagList.isEmpty()) {
+                tagCategories.put(tagCategory.getCategoryName(), tagList);
+            }
+        }
 
         List<Article> articles = articleRepository.findAll();
         int updatedArticles = 0;
@@ -253,7 +260,7 @@ public class AdminServiceImpl implements AdminService {
         for (Article article : articles) {
             String content = article.getTitle() + " " + article.getContent();
             boolean articleUpdated = false;
-            
+
             for (List<String> tags : tagCategories.values()) {
                 boolean categoryMatched = false;
                 for (String tag : tags) {
@@ -262,7 +269,7 @@ public class AdminServiceImpl implements AdminService {
                         break;
                     }
                 }
-                
+
                 if (categoryMatched) {
                     for (int i = 0; i < Math.min(3, tags.size()); i++) {
                         String tagName = tags.get(i);
